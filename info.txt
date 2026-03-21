@@ -1,0 +1,22 @@
+Components 
+
+1. controllers r for what happens when the API's are called
+    auth -> login/register
+    job -> create/view jobs
+    application -> apply, status
+
+2. Models r for database structures 
+    User -> auth + role
+    Job -> job postings
+    Application -> who applied where(to keep a log of it all)
+
+3. Routes --> API endpoints
+
+4. Middleware
+    this is where the RBAC lives
+    authMiddleware -> checks the JWT
+    roleMiddleware -> checks the role 
+
+5. config --> DB connection
+
+6. utils --> helper functions
