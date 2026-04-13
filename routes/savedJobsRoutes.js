@@ -3,7 +3,7 @@ const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
 const authorizeRoles = require("../middleware/roleMiddleware");
 const SavedJob = require("../models/savedJobs");
-const Job = require("../models/Job");
+const Job = require("../models/job");
 
 // POST /api/saved/:jobId — toggle save/unsave
 router.post("/:jobId", authMiddleware, authorizeRoles("user"), async (req, res) => {
