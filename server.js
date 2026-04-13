@@ -56,7 +56,7 @@ app.use("/api/resumes", resumeRoutes);
 const aiRoutes = require("./routes/aiRoutes");
 app.use("/api/ai", aiRoutes);
 
-const savedJobRoutes = require("./routes/savedJobRoutes");
+const savedJobRoutes = require("./routes/savedJobsRoutes");
 app.use("/api/saved", savedJobRoutes);
 
 app.get("/", (req, res) => res.send("API is running..."));
