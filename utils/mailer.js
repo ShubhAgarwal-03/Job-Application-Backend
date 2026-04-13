@@ -1,14 +1,8 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM = "JobPortal <onboarding@resend.dev>";
 
-// Base styles shared across all emails
 const BASE_STYLES = `
   body { margin: 0; padding: 0; background: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
   .wrapper { max-width: 580px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
@@ -39,9 +33,7 @@ function baseTemplate(content, footerNote = "") {
 </head>
 <body>
 <div class="wrapper">
-  <div class="header">
-    <div class="logo">Job<span>Portal</span></div>
-  </div>
+  <div class="header"><div class="logo">Job<span>Portal</span></div></div>
   <div class="body">${content}</div>
   <div class="footer">
     <p style="margin:0">You're receiving this because you have an account on JobPortal.${footerNote ? " " + footerNote : ""}</p>
@@ -52,115 +44,76 @@ function baseTemplate(content, footerNote = "") {
 </html>`;
 }
 
-// ── Email 1: Verify email ──────────────────────────────────────────────────
-function verificationEmail(name, verifyUrl) {
-  const content = `
+async function send(to, subject, html) {
+  if (!process.env.RESEND_API_KEY) {
+    console.warn("[Mail] RESEND_API_KEY not set — skipping email to", to);
+    return;
+  }
+  const { error } = await resend.emails.send({ from: FROM, to, subject, html });
+  if (error) throw new Error(error.message);
+}
+
+async function sendVerificationEmail(to, name, verifyUrl) {
+  const html = baseTemplate(`
     <h1>Verify your email address</h1>
     <p>Hey ${name},</p>
-    <p>Thanks for signing up! Click the button below to verify your email address and activate your account. This link expires in <strong>24 hours</strong>.</p>
+    <p>Thanks for signing up! Click below to verify your email. This link expires in <strong>24 hours</strong>.</p>
     <a href="${verifyUrl}" class="cta">Verify my email</a>
-    <p class="muted">If the button doesn't work, copy and paste this link into your browser:<br>${verifyUrl}</p>
+    <p class="muted">Or copy this link: ${verifyUrl}</p>
     <hr class="divider">
-    <p class="muted">If you didn't create an account, you can safely ignore this email.</p>
-  `;
-  return baseTemplate(content, "If you didn't sign up, ignore this email.");
-}
-
-// ── Email 2: Application confirmed ────────────────────────────────────────
-function applicationConfirmedEmail(name, jobTitle, company) {
-  const content = `
-    <h1>Application submitted</h1>
-    <p>Hi ${name},</p>
-    <p>Your application has been received. Here's a summary:</p>
-    <div class="highlight-box">
-      <p>${jobTitle} at ${company}</p>
-    </div>
-    <p>The hiring team will review your application and reach out if there's a match. We'll email you as soon as there's an update.</p>
-    <p class="muted">Applied on ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
-  `;
-  return baseTemplate(content);
-}
-
-// ── Email 3: Application accepted ─────────────────────────────────────────
-function applicationAcceptedEmail(name, jobTitle, company, jobsUrl) {
-  const content = `
-    <h1>Congratulations, ${name}! 🎉</h1>
-    <p>We have great news — your application has been <strong>accepted</strong>.</p>
-    <div class="success-box">
-      <p>${jobTitle} at ${company}</p>
-    </div>
-    <p>The team was impressed with your profile and would like to move forward. Expect to hear from them soon with next steps — keep an eye on your inbox.</p>
-    <p>In the meantime, here's what we'd recommend:</p>
-    <ul style="color:#3f3f46; font-size:15px; line-height:1.8; padding-left:20px; margin:0 0 20px">
-      <li>Review the job description one more time so you're fully prepared</li>
-      <li>Research ${company} — their mission, recent news, and culture</li>
-      <li>Prepare a few questions to ask the interviewer</li>
-    </ul>
-    <a href="${jobsUrl}" class="cta">Browse more opportunities</a>
-    <hr class="divider">
-    <p class="muted">There are always new roles being added to JobPortal. Keep exploring — your next big move might already be listed.</p>
-  `;
-  return baseTemplate(content);
-}
-
-// ── Email 4: Application rejected ─────────────────────────────────────────
-function applicationRejectedEmail(name, jobTitle, company, jobsUrl) {
-  const content = `
-    <h1>An update on your application</h1>
-    <p>Hi ${name},</p>
-    <p>Thank you for applying for <strong>${jobTitle}</strong> at <strong>${company}</strong>. After careful consideration, the team has decided not to move forward with your application at this time.</p>
-    <p>We know this isn't the news you were hoping for — but this is far from the end of the road.</p>
-    <hr class="divider">
-    <p><strong>What's next for you?</strong></p>
-    <p>Job searching is a process, and every application is a step forward. Here's how to keep the momentum going:</p>
-    <ul style="color:#3f3f46; font-size:15px; line-height:1.8; padding-left:20px; margin:0 0 20px">
-      <li>Your profile and resume are already saved — applying to new roles takes seconds</li>
-      <li>New jobs are added regularly — the right one might already be waiting</li>
-      <li>Consider updating your resume with any recent projects or skills</li>
-    </ul>
-    <a href="${jobsUrl}" class="cta cta-secondary">Browse open positions</a>
-    <hr class="divider">
-    <p class="muted">We'll keep your profile on file. If a role that matches your background opens up, we want you to be the first to know.</p>
-    <p class="muted">Best of luck — we're rooting for you.</p>
-  `;
-  return baseTemplate(content, "If you have questions, reply to this email.");
-}
-
-// ── Send helpers ───────────────────────────────────────────────────────────
-async function sendVerificationEmail(to, name, verifyUrl) {
-  await transporter.sendMail({
-    from: `"JobPortal" <${process.env.MAIL_USER}>`,
-    to,
-    subject: "Verify your email — JobPortal",
-    html: verificationEmail(name, verifyUrl),
-  });
+    <p class="muted">If you didn't create an account, ignore this email.</p>
+  `);
+  await send(to, "Verify your email — JobPortal", html);
 }
 
 async function sendApplicationConfirmed(to, name, jobTitle, company) {
-  await transporter.sendMail({
-    from: `"JobPortal" <${process.env.MAIL_USER}>`,
-    to,
-    subject: `Application received: ${jobTitle} at ${company}`,
-    html: applicationConfirmedEmail(name, jobTitle, company),
-  });
+  const html = baseTemplate(`
+    <h1>Application submitted</h1>
+    <p>Hi ${name},</p>
+    <p>Your application has been received:</p>
+    <div class="highlight-box"><p>${jobTitle} at ${company}</p></div>
+    <p>We'll email you as soon as there's an update.</p>
+    <p class="muted">Applied on ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+  `);
+  await send(to, `Application received: ${jobTitle} at ${company}`, html);
 }
 
 async function sendApplicationAccepted(to, name, jobTitle, company, jobsUrl) {
-  await transporter.sendMail({
-    from: `"JobPortal" <${process.env.MAIL_USER}>`,
-    to,
-    subject: `🎉 You've been accepted — ${jobTitle} at ${company}`,
-    html: applicationAcceptedEmail(name, jobTitle, company, jobsUrl),
-  });
+  const html = baseTemplate(`
+    <h1>Congratulations, ${name}! 🎉</h1>
+    <p>Your application has been <strong>accepted</strong>.</p>
+    <div class="success-box"><p>${jobTitle} at ${company}</p></div>
+    <p>The team was impressed with your profile. Expect to hear from them soon with next steps.</p>
+    <ul style="color:#3f3f46;font-size:15px;line-height:1.8;padding-left:20px;margin:0 0 20px">
+      <li>Review the job description one more time</li>
+      <li>Research ${company} — their mission and culture</li>
+      <li>Prepare questions to ask the interviewer</li>
+    </ul>
+    <a href="${jobsUrl}" class="cta">Browse more opportunities</a>
+    <hr class="divider">
+    <p class="muted">New roles are added regularly. Keep exploring — your next move might already be listed.</p>
+  `);
+  await send(to, `🎉 You've been accepted — ${jobTitle} at ${company}`, html);
 }
 
 async function sendApplicationRejected(to, name, jobTitle, company, jobsUrl) {
-  await transporter.sendMail({
-    from: `"JobPortal" <${process.env.MAIL_USER}>`,
-    to,
-    subject: `Update on your application — ${jobTitle}`,
-    html: applicationRejectedEmail(name, jobTitle, company, jobsUrl),
-  });
+  const html = baseTemplate(`
+    <h1>An update on your application</h1>
+    <p>Hi ${name},</p>
+    <p>Thank you for applying for <strong>${jobTitle}</strong> at <strong>${company}</strong>. After careful consideration, the team has decided not to move forward at this time.</p>
+    <p>This is far from the end of the road.</p>
+    <hr class="divider">
+    <p><strong>What's next for you?</strong></p>
+    <ul style="color:#3f3f46;font-size:15px;line-height:1.8;padding-left:20px;margin:0 0 20px">
+      <li>Your profile and resume are saved — applying takes seconds</li>
+      <li>New jobs are added regularly</li>
+      <li>Consider updating your resume with recent projects</li>
+    </ul>
+    <a href="${jobsUrl}" class="cta cta-secondary">Browse open positions</a>
+    <hr class="divider">
+    <p class="muted">We'll keep your profile on file. Best of luck — we're rooting for you.</p>
+  `);
+  await send(to, `Update on your application — ${jobTitle}`, html);
 }
 
 module.exports = {
