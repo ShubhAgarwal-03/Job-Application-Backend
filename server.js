@@ -13,6 +13,9 @@ connectDB();
 
 const app = express();
 
+// Trust the vendor proxy - required for express-rate-limit to work correctly
+app.set("trust proxy", 1);
+
 // Middleware
 app.use(cors({origin: process.env.FRONTEND_URL || "http://localhost:3000",
   credentials: true,
