@@ -1,27 +1,33 @@
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
-const connectDB = require("./config/db");
 const rateLimit = require("express-rate-limit");
-// const authRoutes = require("./routes/authRoutes")
+const connectDB = require("./config/db");
 
-
-// Load env
 dotenv.config();
-
 connectDB();
 
 const app = express();
 
-// Trust the vendor proxy - required for express-rate-limit to work correctly
+// Trust Render's proxy — required for express-rate-limit to work correctly
 app.set("trust proxy", 1);
 
-// Middleware
-app.use(cors({origin: process.env.FRONTEND_URL || "http://localhost:3000",
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowed = [
+      process.env.FRONTEND_URL,
+      "http://localhost:3000",
+    ];
+    // allow all Vercel preview deployments
+    if (!origin || allowed.includes(origin) || origin.endsWith(".vercel.app")) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true,
 }));
-app.use(express.json({ limit: "10mb"}));    //increased limit for base64 pdf payload
-
+app.use(express.json({ limit: "10mb" }));
 
 // Rate limiting on auth routes — max 20 attempts per 15 min per IP
 const authLimiter = rateLimit({
@@ -35,9 +41,6 @@ const authLimiter = rateLimit({
 const authRoutes = require("./routes/authRoutes");
 app.use("/api/auth", authLimiter, authRoutes);
 
-
-
-//// testing of it ////////////
 const testRoutes = require("./routes/testRoute");
 app.use("/api/test", testRoutes);
 
@@ -53,21 +56,10 @@ app.use("/api/resumes", resumeRoutes);
 const aiRoutes = require("./routes/aiRoutes");
 app.use("/api/ai", aiRoutes);
 
-const userRoutes = require("./routes/userRoutes");
-app.use("/api/users", userRoutes);
+const savedJobRoutes = require("./routes/savedJobRoutes");
+app.use("/api/saved", savedJobRoutes);
 
-const savedJobsRoutes = require("./routes/savedJobsRoutes");
-app.use("/api/saved", savedJobsRoutes);
- 
+app.get("/", (req, res) => res.send("API is running..."));
 
-// Test route
-app.get("/", (req, res) => {
-  res.send("API is running...");
-});
-
-// Server start
 const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
