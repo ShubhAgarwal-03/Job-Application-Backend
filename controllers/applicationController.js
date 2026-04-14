@@ -57,17 +57,43 @@ exports.getAllApplications = async (req, res) => {
       .populate("job", "title company description")
       .populate("resume", "id filename createdAt");
 
-    const formatted = applications.map((app) => ({
-      id: app._id,
-      status: app.status,
-      user: { id: app.user._id, name: app.user.name, email: app.user.email },
-      job: { id: app.job._id, title: app.job.title, company: app.job.company, description: app.job.description },
-      resume: app.resume ? { id: app.resume._id, filename: app.resume.filename, createdAt: app.resume.createdAt } : null,
-      createdAt: app.createdAt,
-    }));
+    // const formatted = applications.map((app) => ({
+    //   id: app._id,
+    //   status: app.status,
+    //   user: { id: app.user._id, name: app.user.name, email: app.user.email },
+    //   job: { id: app.job._id, title: app.job.title, company: app.job.company, description: app.job.description },
+    //   resume: app.resume ? { id: app.resume._id, filename: app.resume.filename, createdAt: app.resume.createdAt } : null,
+    //   createdAt: app.createdAt,
+    // }));
+
+    // Add filters and optional chaining (?.) to prevent crashes
+    const formatted = applications
+      .filter((app) => app.user && app.job) // ONLY show apps where both user and job exist
+      .map((app) => ({
+        id: app._id,
+        status: app.status,
+        user: { 
+          id: app.user?._id, 
+          name: app.user?.name || "Unknown User", 
+          email: app.user?.email || "N/A" 
+        },
+        job: { 
+          id: app.job?._id, 
+          title: app.job?.title || "Deleted Job", 
+          company: app.job?.company || "N/A", 
+          description: app.job?.description || "" 
+        },
+        resume: app.resume ? { 
+          id: app.resume._id, 
+          filename: app.resume.filename, 
+          createdAt: app.resume.createdAt 
+        } : null,
+        createdAt: app.createdAt,
+      }));
 
     res.json(formatted);
   } catch (error) {
+    console.error("Error in getAllApplications:", error); // Log the actual error to Render
     res.status(500).json({ message: error.message });
   }
 };
