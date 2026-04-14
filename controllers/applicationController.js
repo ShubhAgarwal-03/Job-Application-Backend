@@ -1,5 +1,5 @@
-const Application = require("../models/application");
-const Job = require("../models/job");
+const Application = require("../models/Application");
+const Job = require("../models/Job");
 const Resume = require("../models/resume");
 const User = require("../models/user");
 const {
@@ -26,12 +26,10 @@ exports.applyToJob = async (req, res) => {
     if (resume.user.toString() !== userId) {
       return res.status(403).json({ message: "That resume does not belong to you" });
     }
-    
-    // check of the job exists
+
     const job = await Job.findById(jobId);
     if (!job) return res.status(404).json({ message: "Job not found" });
 
-    // prevent duplicate applications
     const existing = await Application.findOne({ user: userId, job: jobId });
     if (existing) return res.status(400).json({ message: "You have already applied to this job" });
 
@@ -79,7 +77,6 @@ exports.updateApplicationStatus = async (req, res) => {
   try {
     const { status } = req.body;
 
-    // we are restricting the possible status values to the mentioned 3
     const validStatuses = ["pending", "accepted", "rejected"];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ message: "Invalid status value" });
@@ -124,13 +121,21 @@ exports.getMyApplications = async (req, res) => {
       .populate("job", "title company")
       .populate("resume", "id filename createdAt");
 
-    const formatted = applications.map((app) => ({
-      id: app._id,
-      status: app.status,
-      job: { id: app.job._id, title: app.job.title, company: app.job.company },
-      resume: app.resume ? { id: app.resume._id, filename: app.resume.filename, createdAt: app.resume.createdAt } : null,
-      createdAt: app.createdAt,
-    }));
+    const formatted = applications
+      .filter((app) => app.job) // skip if job was deleted
+      .map((app) => ({
+        id: app._id,
+        status: app.status,
+        job: {
+          id: app.job?._id,
+          title: app.job?.title,
+          company: app.job?.company,
+        },
+        resume: app.resume
+          ? { id: app.resume._id, filename: app.resume.filename, createdAt: app.resume.createdAt }
+          : null,
+        createdAt: app.createdAt,
+      }));
 
     res.json(formatted);
   } catch (error) {
