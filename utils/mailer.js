@@ -1,13 +1,12 @@
-const { Resend } = require("resend");
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = "JobPortal <onboarding@resend.dev>";
+// Uses Brevo (formerly Sendinblue) HTTP API
+// No SMTP, no port issues, works on Render free tier
+// 300 emails/day free, no domain required
 
 const BASE_STYLES = `
   body { margin: 0; padding: 0; background: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-  .wrapper { max-width: 580px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .wrapper { max-width: 580px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; }
   .header { padding: 32px 40px 24px; border-bottom: 1px solid #e4e4e7; }
-  .logo { font-size: 18px; font-weight: 700; color: #18181b; letter-spacing: -0.3px; }
+  .logo { font-size: 18px; font-weight: 700; color: #18181b; }
   .logo span { color: #2563eb; }
   .body { padding: 32px 40px; }
   .footer { padding: 20px 40px; background: #f9fafb; border-top: 1px solid #e4e4e7; font-size: 12px; color: #9ca3af; }
@@ -45,41 +44,64 @@ function baseTemplate(content, footerNote = "") {
 }
 
 async function send(to, subject, html) {
-  if (!process.env.RESEND_API_KEY) {
-    console.warn("[Mail] RESEND_API_KEY not set — skipping email to", to);
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.MAIL_USER;
+
+  if (!apiKey || !senderEmail) {
+    console.warn("[Mail] BREVO_API_KEY or MAIL_USER not set — skipping email to", to);
     return;
   }
-  const { error } = await resend.emails.send({ from: FROM, to, subject, html });
-  if (error) throw new Error(error.message);
+
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "accept": "application/json",
+      "api-key": apiKey,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: { name: "JobPortal", email: senderEmail },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    console.error("[Mail] Brevo error:", JSON.stringify(data));
+    throw new Error(data.message || "Brevo API error");
+  }
+
+  console.log("[Mail] Sent to", to);
 }
 
 async function sendVerificationEmail(to, name, verifyUrl) {
-  const html = baseTemplate(`
+  await send(to, "Verify your email — JobPortal", baseTemplate(`
     <h1>Verify your email address</h1>
     <p>Hey ${name},</p>
     <p>Thanks for signing up! Click below to verify your email. This link expires in <strong>24 hours</strong>.</p>
     <a href="${verifyUrl}" class="cta">Verify my email</a>
-    <p class="muted">Or copy this link: ${verifyUrl}</p>
+    <p class="muted">Or copy this link into your browser:<br>${verifyUrl}</p>
     <hr class="divider">
     <p class="muted">If you didn't create an account, ignore this email.</p>
-  `);
-  await send(to, "Verify your email — JobPortal", html);
+  `, "If you didn't sign up, ignore this."));
 }
 
 async function sendApplicationConfirmed(to, name, jobTitle, company) {
-  const html = baseTemplate(`
+  await send(to, `Application received: ${jobTitle} at ${company}`, baseTemplate(`
     <h1>Application submitted</h1>
     <p>Hi ${name},</p>
     <p>Your application has been received:</p>
     <div class="highlight-box"><p>${jobTitle} at ${company}</p></div>
     <p>We'll email you as soon as there's an update.</p>
     <p class="muted">Applied on ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
-  `);
-  await send(to, `Application received: ${jobTitle} at ${company}`, html);
+  `));
 }
 
 async function sendApplicationAccepted(to, name, jobTitle, company, jobsUrl) {
-  const html = baseTemplate(`
+  await send(to, `🎉 You've been accepted — ${jobTitle} at ${company}`, baseTemplate(`
     <h1>Congratulations, ${name}! 🎉</h1>
     <p>Your application has been <strong>accepted</strong>.</p>
     <div class="success-box"><p>${jobTitle} at ${company}</p></div>
@@ -87,17 +109,16 @@ async function sendApplicationAccepted(to, name, jobTitle, company, jobsUrl) {
     <ul style="color:#3f3f46;font-size:15px;line-height:1.8;padding-left:20px;margin:0 0 20px">
       <li>Review the job description one more time</li>
       <li>Research ${company} — their mission and culture</li>
-      <li>Prepare questions to ask the interviewer</li>
+      <li>Prepare questions for the interviewer</li>
     </ul>
     <a href="${jobsUrl}" class="cta">Browse more opportunities</a>
     <hr class="divider">
-    <p class="muted">New roles are added regularly. Keep exploring — your next move might already be listed.</p>
-  `);
-  await send(to, `🎉 You've been accepted — ${jobTitle} at ${company}`, html);
+    <p class="muted">New roles are added regularly. Keep exploring.</p>
+  `));
 }
 
 async function sendApplicationRejected(to, name, jobTitle, company, jobsUrl) {
-  const html = baseTemplate(`
+  await send(to, `Update on your application — ${jobTitle}`, baseTemplate(`
     <h1>An update on your application</h1>
     <p>Hi ${name},</p>
     <p>Thank you for applying for <strong>${jobTitle}</strong> at <strong>${company}</strong>. After careful consideration, the team has decided not to move forward at this time.</p>
@@ -112,8 +133,7 @@ async function sendApplicationRejected(to, name, jobTitle, company, jobsUrl) {
     <a href="${jobsUrl}" class="cta cta-secondary">Browse open positions</a>
     <hr class="divider">
     <p class="muted">We'll keep your profile on file. Best of luck — we're rooting for you.</p>
-  `);
-  await send(to, `Update on your application — ${jobTitle}`, html);
+  `));
 }
 
 module.exports = {
